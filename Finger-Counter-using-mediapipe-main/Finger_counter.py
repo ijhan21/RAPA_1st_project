@@ -41,7 +41,6 @@ while True:
             ring  =(lmList[tipIds[3]][1],lmList[tipIds[3]][2],lmList[tipIds[3] - 2][1],lmList[tipIds[3] - 2][2])
             pinky =(lmList[tipIds[4]][1],lmList[tipIds[4]][2],lmList[tipIds[4] - 2][1],lmList[tipIds[4] - 2][2])
             wrist =(lmList[tipIds[5]][1],lmList[tipIds[5]][2])
-            print("check",lmList[tipIds[0]][3])
 
             finger_list = [thumb, index, middle, ring, pinky]
             
