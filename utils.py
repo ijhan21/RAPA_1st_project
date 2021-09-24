@@ -14,21 +14,61 @@ class UI:
 class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
     def __init__(self):
         self.pre_state = "init"
-        pass
+        self.pre_coor = (0,0)
+        self.ready_state = False
+        self.state = None
+        self.LIMIT_DISTANCE = 80
+        self.w_diff_sum = 0
+        self.h_diff_sum = 0
     def motion_to_action(self, state, coordinate):
         # if A조건: A행동
         if self.pre_state =="init" and state == 'ready':
             self.ready_state = True
+            self.pre_coor = coordinate
+            self.pre_state = 'ready'
             action = "입력 대기 상태"
-        if self.ready_state:
-            if self.state == "move":
-                pass
-        # elif B조건 : B행동
-        if state=="init":
-            self.pre_state = "init"
-        pass
-    # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민    
+        elif state=="init":
+            action = "입력 종료"
+            self.initiate()
+        elif self.ready_state:
+            if state == "move":
+                w_diff = coordinate[0]-self.pre_coor[0]
+                h_diff = coordinate[1]-self.pre_coor[1]
+                if self.pre_coor==(0,0):
+                    w_diff=0
+                    h_diff=0
+                self.w_diff_sum += w_diff
+                # print(self.w_diff_sum)
+                self.h_diff_sum += h_diff
+                if abs(self.w_diff_sum) > self.LIMIT_DISTANCE:
+                    if self.w_diff_sum > 0:
+                        action = "좌측이동"
+                    else:
+                        action = "우측이동"
+                    self.initiate()
 
+                elif abs(self.h_diff_sum) > self.LIMIT_DISTANCE:
+                    # 수직 이동 모드
+                    if self.h_diff_sum > 0:
+                        action = "아래이동"
+                    else:
+                        action = "위로이동"                
+                    self.initiate()
+                else:
+                    action = None
+                self.pre_coor = coordinate
+            else:action=None
+        else:
+            action=None
+        # 주먹을 쥐면 초기상태로
+    # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민    
+        return action
+    def initiate(self):
+        self.ready_state = False
+        self.pre_state ="init"
+        self.w_diff_sum = 0
+        self.h_diff_sum = 0
+        self.pre_coor = (0,0)
 class GetData:
     def __init__(self):               
         # 데이터 수집        
@@ -42,7 +82,8 @@ class GetData:
         pTime=0
         img=self.detector.findHands(frame)
         lmList=self.detector.findPosition(img,draw=False)
-
+        state = None
+        wrist = None
         if lmList:
             thumb =(lmList[self.tipIds[0]][1],lmList[self.tipIds[0]][2],lmList[self.tipIds[0] - 2][1],lmList[self.tipIds[0] - 2][2])
             index =(lmList[self.tipIds[1]][1],lmList[self.tipIds[1]][2],lmList[self.tipIds[1] - 2][1],lmList[self.tipIds[1] - 2][2])
@@ -67,10 +108,10 @@ class GetData:
                 # totalFingers=fingers.count(1)
                 # print(totalFingers)
                 action = {
-                    str([1,1,0,0,1]):"ready",
+                    str([1,1,0,0,1]):"init",
                     str([1,1,1,1,1]):"move",
                     str([1,1,0,0,0]):"choise",
-                    str([1,0,0,0,0]):"init",
+                    str([1,0,0,0,0]):"ready",
                     str([1,1,1,0,0]):"None",
                 }
 
@@ -85,7 +126,7 @@ class GetData:
             cTime=time.time()
             fps=1/(cTime-pTime)
             pTime=cTime
-            return state, wrist
+        return state, wrist
 
     # 안정적인 손가락 정보 인식 전달 목표
     # 손가락 이외의 기능 추가 여부 검토    
