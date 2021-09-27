@@ -20,7 +20,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         self.LIMIT_DISTANCE = 80
         self.w_diff_sum = 0
         self.h_diff_sum = 0
-    def motion_to_action(self, state, coordinate):
+    def motion_to_action(self, state, coordinate,transaction=True):
         # if A조건: A행동
         if self.pre_state =="init" and state == 'ready':
             self.ready_state = True
@@ -29,7 +29,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
             action = "입력 대기 상태"
         elif state=="init":
             action = "입력 종료"
-            self.initiate()
+            self.initiate(transaction)
         elif self.ready_state:
             if state == "move":
                 w_diff = coordinate[0]-self.pre_coor[0]
@@ -45,7 +45,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
                         action = "좌측이동"
                     else:
                         action = "우측이동"
-                    self.initiate()
+                    self.initiate(transaction)
 
                 elif abs(self.h_diff_sum) > self.LIMIT_DISTANCE:
                     # 수직 이동 모드
@@ -53,19 +53,20 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
                         action = "아래이동"
                     else:
                         action = "위로이동"                
-                    self.initiate()
+                    self.initiate(transaction)
                 else:
                     action = None
                 self.pre_coor = coordinate
             else:action=None
         else:
             action=None
-        # 주먹을 쥐면 초기상태로
+        # peace 초기상태로
     # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민    
         return action
-    def initiate(self):
+    def initiate(self, transaction):
         self.ready_state = False
-        self.pre_state ="init"
+        if transaction:
+            self.pre_state ="init"
         self.w_diff_sum = 0
         self.h_diff_sum = 0
         self.pre_coor = (0,0)

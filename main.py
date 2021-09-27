@@ -3,7 +3,8 @@ from utils import *
 import time
 import cv2
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
 get_data = GetData()
 motion_detect = Motion_Detect()
 while True:
@@ -18,7 +19,7 @@ while True:
             print(action)
 
     cv2.imshow('frame', frame)
-    key = cv2.waitKey(30)
+    key = cv2.waitKey(1)
     if key ==27:
         break
 
