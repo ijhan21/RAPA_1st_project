@@ -4,6 +4,7 @@ import time
 import cv2
 
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+# cap = cv2.VideoCapture(r'C:\python\rapa\opencv_class\videos\robot.mp4')
 
 get_data = GetData()
 motion_detect = Motion_Detect()

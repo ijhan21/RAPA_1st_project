@@ -3,6 +3,7 @@ import time
 import os
 import hand_tracking_module as htm
 import math
+import numpy as np
 
 # UI 클래스
 class UI:
@@ -17,7 +18,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         self.pre_coor = (0,0)
         self.ready_state = False
         self.state = None
-        self.LIMIT_DISTANCE = 80
+        self.LIMIT_DISTANCE = 100
         self.w_diff_sum = 0
         self.h_diff_sum = 0
     def motion_to_action(self, state, coordinate,transaction=True):
@@ -74,6 +75,7 @@ class GetData:
     def __init__(self):               
         # 데이터 수집        
         self.detector=htm.handDetector(detectionCon=0.75)
+        # self.detector=htm.handDetector(detectionCon=0.2,trackCon=0.3)
         self.tipIds=[4,8,12,16,20,0]
 
         self.state = None
@@ -93,18 +95,34 @@ class GetData:
             pinky =(lmList[self.tipIds[4]][1],lmList[self.tipIds[4]][2],lmList[self.tipIds[4] - 2][1],lmList[self.tipIds[4] - 2][2])
             wrist =(lmList[self.tipIds[5]][1],lmList[self.tipIds[5]][2])
 
+            #엄지손가락 인식을 위한 삼각형 알고리즘
+            pt1 = wrist
+            pt2 = (lmList[self.tipIds[0] - 2][1],lmList[self.tipIds[0] - 2][2])
+            pt3 = (lmList[self.tipIds[1] - 3][1],lmList[self.tipIds[1] - 3][2])
+            area = tri_area(pt1, pt2, pt3)
+
+            # Compare Tri
+            pt1 = (lmList[self.tipIds[0]][1],lmList[self.tipIds[0]][2])
+            pt2 = (lmList[self.tipIds[0] - 2][1],lmList[self.tipIds[0] - 2][2])
+            pt3 = lmList[self.tipIds[4] - 2][1],lmList[self.tipIds[4] - 2][2]
+            area_compare = tri_area(pt1, pt2, pt3)
+            area_rate = area/area_compare
+            # print(round(area/area_compare,2)) #area, area_compare, 
+
             finger_list = [thumb, index, middle, ring, pinky]
             
             if len(lmList) !=0:
                 fingers=[]
                 for i in range(5):
-                    if i ==0 and (distance(finger_list[i][:2], [lmList[self.tipIds[3] - 3][1],lmList[self.tipIds[3] - 3][2]]) > distance(finger_list[i][2:], [lmList[self.tipIds[2] - 3][1],lmList[self.tipIds[2] - 3][2]]) or \
-                        distance(finger_list[i][:2],index[2:]) > distance(finger_list[i][2:], index[2:])): # 엄지손가락일경우는 새끼손가락과의 거리로 계산
-                        fingers.append(1)
-                    elif distance(finger_list[i][:2], wrist) > distance(finger_list[i][2:], wrist):
-                        fingers.append(1)
+                    if i ==0:
+                        if area_rate < 1:
+                            fingers.append(1)
+                        else:fingers.append(0)
                     else:
-                        fingers.append(0)
+                        if distance(finger_list[i][:2], wrist) > distance(finger_list[i][2:], wrist):
+                            fingers.append(1)
+                        else:
+                            fingers.append(0)
 
                 # totalFingers=fingers.count(1)
                 # print(totalFingers)
@@ -156,3 +174,18 @@ def distance(pt1, pt2):
     b = pt1[1]-pt2[1]    # 선 b의 길이 
     c = math.sqrt((a * a) + (b * b))
     return c
+
+# 요소의 squre root
+def mag(x): 
+    return math.sqrt(sum(i**2 for i in x))
+
+# 엄지손가락 인식 개선을 위한 삼각형 넓이 알고리즘
+def tri_area(pt1, pt2, pt3):
+    pt1 = np.array(pt1)
+    pt2 = np.array(pt2)
+    pt3 = np.array(pt3)
+    pt_a = pt2-pt1
+    pt_b = pt3-pt1
+    cos_theta = (np.dot(pt_a, pt_b))/(mag(pt_a)*mag(pt_b))
+    area = mag(pt_a)*mag(pt_b)*math.sin(math.acos(cos_theta))*0.5
+    return area
