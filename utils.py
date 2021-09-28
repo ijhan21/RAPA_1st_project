@@ -41,7 +41,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         def initialize(self):
             self.data_pack = list()
         
-    def motion_to_action(self, state, coordinate,transaction=True):
+    def motion_to_action(self, state, coordinate,transaction=False):
         # if A조건: A행동
         # if self.pre_state =="init" and state == 'ready':
         if state == 'ready':
