@@ -154,9 +154,10 @@ class GetData:
             pt2 = (lmList[self.tipIds[0] - 2][1],lmList[self.tipIds[0] - 2][2])
             pt3 = lmList[self.tipIds[4] - 2][1],lmList[self.tipIds[4] - 2][2]
             area_compare = tri_area(pt1, pt2, pt3)
-            if area is None or area_compare in None:
-                continue
-            area_rate = area/area_compare
+            if area == None or area_compare == None:
+                area_rate = 0.
+            else:
+                area_rate = area/area_compare
             # print(round(area/area_compare,2)) #area, area_compare, 
 
             finger_list = [thumb, index, middle, ring, pinky]

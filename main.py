@@ -1,4 +1,3 @@
-from threading import Thread
 from utils import *
 import time
 import cv2
