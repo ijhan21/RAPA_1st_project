@@ -154,6 +154,8 @@ class GetData:
             pt2 = (lmList[self.tipIds[0] - 2][1],lmList[self.tipIds[0] - 2][2])
             pt3 = lmList[self.tipIds[4] - 2][1],lmList[self.tipIds[4] - 2][2]
             area_compare = tri_area(pt1, pt2, pt3)
+            if area is None or area_compare in None:
+                continue
             area_rate = area/area_compare
             # print(round(area/area_compare,2)) #area, area_compare, 
 
@@ -230,12 +232,16 @@ def mag(x):
     return math.sqrt(sum(i**2 for i in x))
 
 # 엄지손가락 인식 개선을 위한 삼각형 넓이 알고리즘
-def tri_area(pt1, pt2, pt3):
+def tri_area(pt1, pt2, pt3):    
     pt1 = np.array(pt1)
     pt2 = np.array(pt2)
     pt3 = np.array(pt3)
     pt_a = pt2-pt1
     pt_b = pt3-pt1
-    cos_theta = (np.dot(pt_a, pt_b))/(mag(pt_a)*mag(pt_b))
-    area = mag(pt_a)*mag(pt_b)*math.sin(math.acos(cos_theta))*0.5
+    try:
+        cos_theta = (np.dot(pt_a, pt_b))/(mag(pt_a)*mag(pt_b))
+        area = mag(pt_a)*mag(pt_b)*math.sin(math.acos(cos_theta))*0.5
+    except Exception as e:
+        print(e)
+        area = None
     return area
