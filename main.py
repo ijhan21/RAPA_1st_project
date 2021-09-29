@@ -17,7 +17,8 @@ while True:
     ret, frame = cap.read()
     if ret:
         # 이미지 분석해서 손동작과 손목 좌표를 받아온다
-        state, coordinate = get_data.state_update(frame)
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        state, coordinate, frame = get_data.state_update(frame)
         # print(state, coordinate)
         # 손동작과 손목 좌표를 통해서 모션을 해석
         action = motion_detect.motion_to_action(state, coordinate)

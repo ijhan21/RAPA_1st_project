@@ -16,12 +16,14 @@ class UI:
 class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
     def __init__(self):
         self.pre_state = "init"
+        self.pre_action =""
         self.pre_coor = (0,0)
         self.ready_state = False
         self.state = None
-        self.LIMIT_DISTANCE = 100
-        self.w_diff_sum = 0
-        self.h_diff_sum = 0        
+        self.LIMIT_DATA_LEN =80
+        self.LIMIT_DISTANCE = 50
+        self.w_diff_sum = list()
+        self.h_diff_sum = list()   
         self.ensemble = self.Ensemble(limit_num = 5)
     # 인식 정확도 개선을 위한 앙상블 알고리즘 적용
     class Ensemble:
@@ -47,13 +49,13 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
             self.pre_coor = coordinate
             self.pre_state = 'ready'
             action = "입력 대기 상태"
-            self.w_diff_sum = 0
-            self.h_diff_sum = 0
+            self.w_diff_sum =list()
+            self.h_diff_sum =list()
             # self.initiate(transaction)
 
         elif state=="init":
             action = "입력 종료"
-            self.initiate(transaction)
+            self.initiate(transaction=True)
             self.ready_state = False
 
         elif self.ready_state:
@@ -63,24 +65,34 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
                 h_diff = coordinate[1]-self.pre_coor[1]
                 if self.pre_coor==(0,0):
                     w_diff=0
-                    h_diff=0
-                self.w_diff_sum += w_diff
-                # print(self.w_diff_sum)
-                self.h_diff_sum += h_diff
-                if abs(self.w_diff_sum) > self.LIMIT_DISTANCE:
-                    if self.w_diff_sum > 0:
+                    h_diff=0                
+                self.w_diff_sum.append(w_diff)
+                self.h_diff_sum.append(h_diff)
+
+                if len(self.w_diff_sum)>self.LIMIT_DATA_LEN:
+                    self.w_diff_sum.pop(0)
+                w_diff_sum_tmp = np.sum(self.w_diff_sum)
+                if len(self.h_diff_sum)>self.LIMIT_DATA_LEN:
+                    self.h_diff_sum.pop(0)
+                h_diff_sum_tmp = np.sum(self.h_diff_sum)                    
+
+                if abs(w_diff_sum_tmp) > self.LIMIT_DISTANCE:
+                    if w_diff_sum_tmp > 0:
                         action = "좌측이동"
                     else:
                         action = "우측이동"
+                    # if transaction:
+                    #     self.ready_state = False
                     # self.initiate(transaction)
 
-                elif abs(self.h_diff_sum) > self.LIMIT_DISTANCE:
+                elif abs(h_diff_sum_tmp) > self.LIMIT_DISTANCE:
                     # 수직 이동 모드
-                    if self.h_diff_sum > 0:
+                    if h_diff_sum_tmp > 0:
                         action = "아래이동"
                     else:
                         action = "위로이동"                
-                    # self.initiate(transaction)
+                    # if transaction:
+                    #     self.ready_state = False
                 else:
                     action = None
                 self.pre_coor = coordinate
@@ -90,14 +102,22 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         # peace 초기상태로
         # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민    
         ensemble_action = self.ensemble.update(action)
+        if transaction and self.pre_action != ensemble_action and ensemble_action in ['아래이동',"위로이동","좌측이동","우측이동"]:
+            print('check', state)
+            self.ready_state = False
+            self.ensemble.initialize()
+            # self.initiate(transaction=True)
+        self.pre_action = ensemble_action
         return ensemble_action
 
     def initiate(self, transaction):
         self.ready_state = False
         if transaction:
             self.pre_state ="init"
-        self.w_diff_sum = 0
-        self.h_diff_sum = 0
+            self.ready_state = False
+            
+        self.w_diff_sum = list()
+        self.h_diff_sum = list()
         self.pre_coor = (0,0)
 class GetData:
     def __init__(self):               
@@ -170,10 +190,12 @@ class GetData:
                 cv2.putText(img,state,(45,375),1,3,(255,100,0),2)
                 cv2.putText(img,str(fingers),(45,275),1,3,(255,100,0),2)
 
+            frame = img # 불분명한 코드 수정
+
             cTime=time.time()
             fps=1/(cTime-pTime)
             pTime=cTime
-        return state, wrist
+        return state, wrist, frame
 
     # 안정적인 손가락 정보 인식 전달 목표
     # 손가락 이외의 기능 추가 여부 검토    
