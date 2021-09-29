@@ -8,7 +8,12 @@ cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 get_data = GetData()
 motion_detect = Motion_Detect()
+tm = cv2.TickMeter()
+time_checker = list()
 while True:
+    # 시간 측정
+    tm.reset()
+    tm.start()
     ret, frame = cap.read()
     if ret:
         # 이미지 분석해서 손동작과 손목 좌표를 받아온다
@@ -23,4 +28,8 @@ while True:
     key = cv2.waitKey(1)
     if key ==27:
         break
+    tm.stop()
+    ms = tm.getTimeMilli()
+    time_checker.append(ms)
+print("평균 처리 시간:",round(np.mean(np.array(time_checker)),2))
 

@@ -4,6 +4,7 @@ import os
 import hand_tracking_module as htm
 import math
 import numpy as np
+from collections import Counter
 
 # UI 클래스
 class UI:
@@ -20,19 +21,44 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         self.state = None
         self.LIMIT_DISTANCE = 100
         self.w_diff_sum = 0
-        self.h_diff_sum = 0
+        self.h_diff_sum = 0        
+        self.ensemble = self.Ensemble(limit_num = 5)
+    # 인식 정확도 개선을 위한 앙상블 알고리즘 적용
+    class Ensemble:
+        def __init__(self, limit_num) -> None:
+            self.data_pack = list()            
+            self.limit_num = limit_num
+        def update(self, new_data):
+            self.data_pack.append(new_data)
+            if len(self.data_pack)>self.limit_num:
+                self.data_pack.pop(0)
+            # 최빈값 받아오기
+            cnt = Counter(self.data_pack)
+            mode = cnt.most_common(1)
+            return mode[0][0] # 최빈값 리턴
+        def initialize(self):
+            self.data_pack = list()
+        
     def motion_to_action(self, state, coordinate,transaction=True):
         # if A조건: A행동
-        if self.pre_state =="init" and state == 'ready':
+        # if self.pre_state =="init" and state == 'ready':
+        if state == 'ready':
             self.ready_state = True
             self.pre_coor = coordinate
             self.pre_state = 'ready'
             action = "입력 대기 상태"
+            self.w_diff_sum = 0
+            self.h_diff_sum = 0
+            # self.initiate(transaction)
+
         elif state=="init":
             action = "입력 종료"
             self.initiate(transaction)
+            self.ready_state = False
+
         elif self.ready_state:
             if state == "move":
+                # print("move 대기")
                 w_diff = coordinate[0]-self.pre_coor[0]
                 h_diff = coordinate[1]-self.pre_coor[1]
                 if self.pre_coor==(0,0):
@@ -46,7 +72,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
                         action = "좌측이동"
                     else:
                         action = "우측이동"
-                    self.initiate(transaction)
+                    # self.initiate(transaction)
 
                 elif abs(self.h_diff_sum) > self.LIMIT_DISTANCE:
                     # 수직 이동 모드
@@ -54,7 +80,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
                         action = "아래이동"
                     else:
                         action = "위로이동"                
-                    self.initiate(transaction)
+                    # self.initiate(transaction)
                 else:
                     action = None
                 self.pre_coor = coordinate
@@ -62,8 +88,10 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         else:
             action=None
         # peace 초기상태로
-    # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민    
-        return action
+        # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민    
+        ensemble_action = self.ensemble.update(action)
+        return ensemble_action
+
     def initiate(self, transaction):
         self.ready_state = False
         if transaction:
