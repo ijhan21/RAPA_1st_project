@@ -1,8 +1,11 @@
+
 import cv2
 import time
-import os
+import os,sys,glob
 import hand_tracking_module as htm
 import math
+import numpy as np
+import threading
 
 # UI 클래스
 class UI:
@@ -17,10 +20,12 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         self.pre_coor = (0,0)
         self.ready_state = False
         self.state = None
-        self.LIMIT_DISTANCE = 80
+        self.LIMIT_DISTANCE = 100
         self.w_diff_sum = 0
         self.h_diff_sum = 0
+        self.highlight = False #하이라이트 저장 변수(이상철 추가) 
     def motion_to_action(self, state, coordinate,transaction=True):
+        action=None
         # if A조건: A행동
         if self.pre_state =="init" and state == 'ready':
             self.ready_state = True
@@ -28,7 +33,7 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
             self.pre_state = 'ready'
             action = "입력 대기 상태"
         elif state=="init":
-            action = "입력 종료"
+            action = "입력종료"
             self.initiate(transaction)
         elif self.ready_state:
             if state == "move":
@@ -57,12 +62,19 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
                 else:
                     action = None
                 self.pre_coor = coordinate
-            else:action=None
+            elif state == 'highlight_on':
+                self.highlight = True
+            elif state == "highlight_off":
+                self.highlight = False
+
+            else:
+                action=None
         else:
             action=None
         # peace 초기상태로
-    # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민    
-        return action
+    # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민 
+        # print('action : %s, highlight : %s in motion_to_action'%( action, self.highlight))   
+        return action, self.highlight
     def initiate(self, transaction):
         self.ready_state = False
         if transaction:
@@ -74,6 +86,7 @@ class GetData:
     def __init__(self):               
         # 데이터 수집        
         self.detector=htm.handDetector(detectionCon=0.75)
+        # self.detector=htm.handDetector(detectionCon=0.2,trackCon=0.3)
         self.tipIds=[4,8,12,16,20,0]
 
         self.state = None
@@ -93,18 +106,34 @@ class GetData:
             pinky =(lmList[self.tipIds[4]][1],lmList[self.tipIds[4]][2],lmList[self.tipIds[4] - 2][1],lmList[self.tipIds[4] - 2][2])
             wrist =(lmList[self.tipIds[5]][1],lmList[self.tipIds[5]][2])
 
+            #엄지손가락 인식을 위한 삼각형 알고리즘
+            pt1 = wrist
+            pt2 = (lmList[self.tipIds[0] - 2][1],lmList[self.tipIds[0] - 2][2])
+            pt3 = (lmList[self.tipIds[1] - 3][1],lmList[self.tipIds[1] - 3][2])
+            area = tri_area(pt1, pt2, pt3)
+
+            # Compare Tri
+            pt1 = (lmList[self.tipIds[0]][1],lmList[self.tipIds[0]][2])
+            pt2 = (lmList[self.tipIds[0] - 2][1],lmList[self.tipIds[0] - 2][2])
+            pt3 = lmList[self.tipIds[4] - 2][1],lmList[self.tipIds[4] - 2][2]
+            area_compare = tri_area(pt1, pt2, pt3)
+            area_rate = area/area_compare
+            # print(round(area/area_compare,2)) #area, area_compare, 
+
             finger_list = [thumb, index, middle, ring, pinky]
             
             if len(lmList) !=0:
                 fingers=[]
                 for i in range(5):
-                    if i ==0 and (distance(finger_list[i][:2], [lmList[self.tipIds[3] - 3][1],lmList[self.tipIds[3] - 3][2]]) > distance(finger_list[i][2:], [lmList[self.tipIds[2] - 3][1],lmList[self.tipIds[2] - 3][2]]) or \
-                        distance(finger_list[i][:2],index[2:]) > distance(finger_list[i][2:], index[2:])): # 엄지손가락일경우는 새끼손가락과의 거리로 계산
-                        fingers.append(1)
-                    elif distance(finger_list[i][:2], wrist) > distance(finger_list[i][2:], wrist):
-                        fingers.append(1)
+                    if i ==0:
+                        if area_rate < 1:
+                            fingers.append(1)
+                        else:fingers.append(0)
                     else:
-                        fingers.append(0)
+                        if distance(finger_list[i][:2], wrist) > distance(finger_list[i][2:], wrist):
+                            fingers.append(1)
+                        else:
+                            fingers.append(0)
 
                 # totalFingers=fingers.count(1)
                 # print(totalFingers)
@@ -113,6 +142,8 @@ class GetData:
                     str([1,1,1,1,1]):"move",
                     str([1,1,0,0,0]):"choise",
                     str([1,0,0,0,0]):"ready",
+                    str([0,1,1,1,0]):"highlight_on",  #하이라이트 저장 변수(이상철 추가)
+                    str([1,0,0,0,1]):"highlight_off",  #하이라이트 저장 변수(이상철 추가)
                     str([1,1,1,0,0]):"None",
                 }
 
@@ -134,19 +165,174 @@ class GetData:
 
 # Action 클래스
 class Action:
-    def __init__(self):
-        # ppt 초기화
-        # ppt 관련 행동 정의
-        pass
+    orange, blue, cyan = (0, 165, 255), (255, 0, 0), (255, 255, 0)
+    white, black = (255, 255, 255), (0, 0, 0) 
+    path = None
+    act= None
+    direction= None         
+    filenames = None
+    idx = 0
+        
+            
+    # image = np.full((300, 500, 3), white, np.uint8)             # 컬러 영상 생성 및 초기화
+    image = None
+     
+
+    center = None         		# 영상의 중심 좌표
+    pt1, pt2 = None, None
+    shade = None                         # 그림자 좌표
+
+    # cv2.circle(image, center, 100, blue)                         # 원 그리기 
+
+    # cv2.circle(image, pt2   , 70 , cyan  , -1)                   # 원 내부 채움
+
+    # font = cv2.FONT_HERSHEY_COMPLEX;
+    # cv2.putText(image, "center_blue", center, font, 1.0, blue)
+    # cv2.putText(image, "pt1_orange", pt1, font, 0.8, orange)
+    # cv2.putText(image, "pt2_cyan",   shade, font, 1.2, black, 2)   # 그림자 효과
+    # cv2.putText(image, "pt2_cyan",   pt2, font, 1.2, cyan , 1)
+
     
-    def action_left(self): # 이전 화면으로 전환
-        raise NotImplementedError
-    def action_move_next(self): # 다음 화면으로 전환
-        raise NotImplementedError
+    radius = 50 
+    moving_dist = 30
+    position = None
+    oldposition = None
+    color = orange
+    origin_image = None
+       
+    
+    def __init__(self):
+        Action.path = 'images'
+        Action.act='slideshow'
+        Action.direction='입력종료'
+         
+        Action.filenames = glob.glob(os.path.join(Action.path, "*"))
+        if not Action.filenames:
+            print("There are no jpg files in 'images' folder")
+            sys.exit()
+
+        Action.idx = 0
+
+            # image = np.full((300, 500, 3), white, np.uint8)             # 컬러 영상 생성 및 초기화
+        Action.image = cv2.imread(Action.filenames[Action.idx])  # 영상 읽기
+        if Action.image is None: raise Exception("영상파일 읽기 오류")
+
+        center = (Action.image.shape[1]//2, Action.image.shape[0]//2)         		# 영상의 중심 좌표
+        # pt1, pt2 = (300, 50), (100, 220)
+        # shade = (pt2[0] + 2, pt2[1] + 2)   
+        position = center
+        oldposition = center
+
+
+         # origin_image = copy.deepcopy(image)
+        Action.origin_image =Action.image.copy()
+    
+    def action(self, act='slideshow', direction='입력종료'): # 이전 화면으로 전환
+        self.direction=direction
+        self.act=act
+        if(act == 'slideshow'):
+            try:
+                cv2.destroyWindow('spotlight')
+                # cv2.destroyAllWindows()
+            except:
+                pass
+            # cv2.namedWindow(act, cv2.WINDOW_NORMAL)
+            cv2.imshow(act, Action.image)
+            # cv2.setWindowProperty('Slideshow', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+            # h,w,c = img.shape    
+            # prev_image = np.zeros((h, w, c), np.uint8)
+            # print(h)
+            # print(w)
+            # print(c)
+
+            # 이전 이미지 화면을 받기위한 빈공간 이미지 입력받기 
+
+           
+
+            # for i in range(101):
+            #     alpha = i/100
+            #     beta = 1.0 - alpha
+            #     dst1 = cv2.addWeighted(img, alpha, prev_image, beta, 0.0)
+            #     cv2.imshow("Slideshow", dst1)
+                
+            #     if cv2.waitKey(1) == ord('p'):
+            #         break
+            # prev_image = img
+
+            if Action.image is None:
+                print('Image load failed in action func')
+                sys.exit()
+            # key = cv2.waitKey(0) & 0xFF
+            
+            if self.direction =='우측이동':
+                Action.idx += 1
+            elif self.direction =='좌측이동':
+                Action.idx -= 1
+            # elif self.direction =='입력종료' or key == 27:
+            # elif key == 27:
+            #     sys.exit()
+            
+            print('self.idx = ', Action.idx)
+            Action.image = cv2.imread(Action.filenames[Action.idx])
+            Action.position=Action.oldposition = (Action.image.shape[1]//2, Action.image.shape[0]//2)         		# 영상의 중심 좌표
+            # cv2.namedWindow('Slideshow', cv2.WINDOW_NORMAL)
+            cv2.imshow("slideshow", Action.image)
+
+        elif act == 'spotlight':
+            # print('spotlight is chosun') cv.WND_PROP_VISIBLE
+            if cv2.getWindowProperty("slideshow",cv2.WND_PROP_VISIBLE):
+                cv2.destroyWindow("slideshow") 
+                # cv2.destroyAllWindows()
+            
+            # cv2.namedWindow(act, cv2.WINDOW_NORMAL)
+            cv2.circle(Action.image, Action.position   ,Action.radius , Action.color, 2)           
+            
+            cv2.imshow(act, Action.image)
+            
+            
+            if self.direction =='위로이동': #up
+                print('up')
+                move = Action.oldposition[1]-Action.moving_dist
+                print('moveup :', move)
+                if move <=Action.radius:
+                    print('move beyond 0')
+                    move = Action.radius
+                Action.position = (Action.oldposition[0], move)
+            elif self.direction =='우측이동': #right
+                print('right')
+                move = Action.oldposition[0]+Action.moving_dist
+                print('moveright :', move)
+                if move >=Action.image.shape[1]-Action.radius:
+                    print('move beyond image.shape[1]-radius')
+                    move = Action.image.shape[1]-Action.radius
+                Action.position = (move, Action.oldposition[1]) 
+            elif self.direction =='아래이동': #down
+                print('down')
+                move = Action.oldposition[1]+Action.moving_dist
+                print('movedown :', move)
+                if move >=Action.image.shape[0]-Action.radius:
+                    print('move beyond image.shape[0]-radius')
+                    move = Action.image.shape[0]-Action.radius
+                Action.position = (Action.oldposition[0], move)
+            elif self.direction =='좌측이동': #left
+                print('left')
+                move = Action.oldposition[0]-Action.moving_dist
+                print('moveleft :', move)
+                if move <=Action.radius:
+                    print('move left beyond 0')
+                    move = Action.radius
+                Action.position = (move, Action.oldposition[1])
+            if self.direction != None and self.direction.find('입력') == -1:
+                print('self.direction', self.direction)
+                Action.oldposition =Action.position
+                # image = copy.deepcopy(origin_image)
+                Action.image =  Action.origin_image.copy()
+   
 
     # 다양한 프로그램 연결이 가능하도록 구성
     
-class Action_ppt(Action):
+class Action_ppt:
     def __init__(self):
         super().__init__()
         pass
@@ -156,3 +342,19 @@ def distance(pt1, pt2):
     b = pt1[1]-pt2[1]    # 선 b의 길이 
     c = math.sqrt((a * a) + (b * b))
     return c
+
+# 요소의 squre root
+def mag(x): 
+    return math.sqrt(sum(i**2 for i in x))
+
+# 엄지손가락 인식 개선을 위한 삼각형 넓이 알고리즘
+def tri_area(pt1, pt2, pt3):
+    pt1 = np.array(pt1)
+    pt2 = np.array(pt2)
+    pt3 = np.array(pt3)
+    pt_a = pt2-pt1
+    pt_b = pt3-pt1
+    cos_theta = (np.dot(pt_a, pt_b))/(mag(pt_a)*mag(pt_b))
+    # print(f'pt_a : {pt_a}, pt_b :{pt_b}, cos_theta : {cos_theta}')
+    area = mag(pt_a)*mag(pt_b)*math.sin(math.acos(cos_theta))*0.5
+    return area
