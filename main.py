@@ -32,8 +32,6 @@ while True:
         # print(f'action : {action}, highlight : {highlight}')
         frm = cv2.putText(frm,str(action),(100,100),1,3,(255,100,0),2)
         h, w, c = frm.shape
-        frame[0:h, 0:w,:] = frm
-        frm = frame
             
     cv2.namedWindow(title1, cv2.WINDOW_NORMAL)  
     cv2.setWindowProperty(title1, cv2.WND_PROP_TOPMOST, 1)
