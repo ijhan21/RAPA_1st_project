@@ -5,6 +5,7 @@ import os,sys,glob
 import hand_tracking_module as htm
 import math
 import numpy as np
+from collections import Counter
 import tkinter as tk
 
 # UI 클래스
@@ -20,10 +21,11 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         self.pre_coor = (0,0)
         self.ready_state = False
         self.state = None
-        self.LIMIT_DISTANCE = 100
+        self.LIMIT_DISTANCE = 50
         self.w_diff_sum = 0
         self.h_diff_sum = 0
         self.highlight = False #하이라이트 저장 변수(이상철 추가) 
+    
     def motion_to_action(self, state, coordinate,transaction=True):
         action=None
         # if A조건: A행동
@@ -75,6 +77,8 @@ class Motion_Detect: #카메라로부터 데이터 받아서 동작과 연결
         # peace 초기상태로
     # 어떤 알고리즘으로 연계되는 행동을 인식하여 반영할 것인지 고민 
         # print('action : %s, highlight : %s in motion_to_action'%( action, self.highlight))   
+        if state =="finish":
+            action =state
         return action, self.highlight
     def initiate(self, transaction):
         self.ready_state = False
@@ -141,10 +145,10 @@ class GetData:
                 action = {
                     str([1,1,0,0,1]):"init",
                     str([1,1,1,1,1]):"move",
-                    str([1,1,0,0,0]):"choise",
+                    str([1,1,0,0,0]):"finish",
                     str([1,0,0,0,0]):"ready",
                     str([0,1,1,1,0]):"highlight_on",  #하이라이트 저장 변수(이상철 추가)
-                    str([1,0,0,0,1]):"highlight_off",  #하이라이트 저장 변수(이상철 추가)
+                    str([0,0,0,0,1]):"highlight_off",  #하이라이트 저장 변수(이상철 추가)
                     str([1,1,1,0,0]):"None",
                 }
 
@@ -214,6 +218,8 @@ class Action:
         Action.direction='입력종료'
          
         Action.filenames = glob.glob(os.path.join(Action.path, "*"))
+        print(Action.filenames)
+
         if not Action.filenames:
             print("There are no jpg files in 'images' folder")
             sys.exit()
@@ -272,7 +278,7 @@ class Action:
                 sys.exit()
             # key = cv2.waitKey(0) & 0xFF
             
-            n=10
+            n=30
             if self.direction =="우측이동":
                 img1 = cv2.imread(Action.filenames[Action.idx])
                 img2 = cv2.imread(Action.filenames[Action.idx+1])
@@ -286,10 +292,10 @@ class Action:
                 frame = np.zeros((max(h1, h2),max(w1,w2),3), np.uint8)
 
                 for i in range(1,n+1):
-                    frame[:h1, :round(w1*(i)/n)] = dst1[:,:round(w1*(i)/n)]
+                    frame[:h1, :round(w1*(i)/n)] = dst1[:,:round(w1*(i)/n)] - np.array((-50,0,100), dtype=np.uint8) #############
                     frame[:h2, round(w1*(i)/n):round(w1*(i)/n)+round(w2*(n-i)/n)] = dst2[:,:round(w2*(n-i)/n)]
                     # cv2.imshow(Action.title[0],frame)                    
-                    self.DoDisplay(Action.title[0],frame)                     
+                    self.DoDisplay(Action.title[0],frame, False)                     
                     cv2.waitKey(50)
                 Action.idx += 1
             elif self.direction =="좌측이동":
@@ -306,9 +312,9 @@ class Action:
 
                 for i in range(1,n+1):
                     frame[:h1, :round(w1*(n-i)/n)] = dst1[:,:round(w1*(n-i)/n)]
-                    frame[:h2, round(w1*(n-i)/n):round(w1*(n-i)/n)+round(w2*(i)/n)] = dst2[:,:round(w2*(i)/n)]
+                    frame[:h2, round(w1*(n-i)/n):round(w1*(n-i)/n)+round(w2*(i)/n)] = dst2[:,:round(w2*(i)/n)] - np.array((100,100,-50), dtype=np.uint8) #############
                     # cv2.imshow(Action.title[0],frame)                    
-                    self.DoDisplay(Action.title[0],frame)                    
+                    self.DoDisplay(Action.title[0],frame, False)                    
                     cv2.waitKey(50)
                 Action.idx -= 1
 
@@ -403,21 +409,14 @@ class Action:
     def ReceiveFrame(self, frm):
         Action.frm=frm
 
-    def DoDisplay(self, title, frame):
+    def DoDisplay(self, title, frame, show=True):############
         
         h,w,_ = Action.frm.shape
         dst1 = cv2.resize(frame, Action.size, 0,0,cv2.INTER_NEAREST) 
-        frH, frW, _ = dst1.shape
-        dst1[round(frH-h):,round(frW-w):] =Action.frm[:,:]
+        if show:
+            frH, frW, _ = dst1.shape
+            dst1[round(frH-h):,round(frW-w):] =Action.frm[:,:]
         cv2.imshow(title, dst1)  
-
-
-
-
-
-
-
-
 
 
     # 다양한 프로그램 연결이 가능하도록 구성
@@ -448,3 +447,38 @@ def tri_area(pt1, pt2, pt3):
     # print(f'pt_a : {pt_a}, pt_b :{pt_b}, cos_theta : {cos_theta}')
     area = mag(pt_a)*mag(pt_b)*math.sin(math.acos(cos_theta))*0.5
     return area
+
+def img_multi_detection(func, frame):    
+    # hsv
+    src_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    hsv_planes = cv2.split(src_hsv)
+    hsv_planes[2] = cv2.equalizeHist(hsv_planes[2])
+    dst_hsv = cv2.merge(hsv_planes)
+    dst_h = cv2.cvtColor(dst_hsv, cv2.COLOR_HSV2BGR)
+    state, coordinate = get_data.state_update(frame)
+
+    action, highlight = func(state, coordinate)
+
+
+# 인식 정확도 개선을 위한 앙상블 알고리즘 적용
+class Ensemble:
+    def __init__(self, limit_num):
+        self.data_pack = list()            
+        self.limit_num = limit_num
+    def update(self, new_data):
+        self.data_pack.append(new_data)
+        if len(self.data_pack)>self.limit_num:
+            self.data_pack.pop(0)
+        # 최빈값 받아오기
+        cnt = Counter(self.data_pack)
+        mode = cnt.most_common(1)
+        return mode[0][0] # 최빈값 리턴
+    def get_ensemble_result(self, datas):
+        cnt = Counter(datas)
+        mode = cnt.most_common(2)
+        print(mode)
+        if mode[0][0] == None and len(mode)>1:
+            return mode[1][0]
+        return mode[0][0] # 최빈값 리턴
+    def initialize(self):
+        self.data_pack = list()

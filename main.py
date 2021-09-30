@@ -1,8 +1,11 @@
-from threading import Thread
-from utils_normal7 import *
+from utils import *
 import time
 import cv2
+import tkinter as tk
+import win32com.client
+import sys
 
+tts = win32com.client.Dispatch("SAPI.SpVoice")
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 # cap = cv2.VideoCapture(r'C:\python\rapa\opencv_class\videos\robot.mp4')
 
@@ -10,14 +13,50 @@ get_data = GetData()
 motion_detect = Motion_Detect()
 actionInstance = Action()
 title = 'webcam'
+ensemble = Ensemble(3)
 while True:
     ret, frame = cap.read()
-    if ret:
-        # 이미지 분석해서 손동작과 손목 좌표를 받아온다
+    action_list = list()
+    highlight_list = list()
+    if ret:       
+
+        ### HSV YCrCb 인식 기능 추가        
         state, coordinate = get_data.state_update(frame)
-        # print(state, coordinate)
-        # 손동작과 손목 좌표를 통해서 모션을 해석
         action, highlight = motion_detect.motion_to_action(state, coordinate)
+        action_list.append(action)
+        highlight_list.append(highlight)
+
+        # HSV
+        src_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv_planes = cv2.split(src_hsv)
+        hsv_planes[2] = cv2.equalizeHist(hsv_planes[2])
+        dst_hsv = cv2.merge(hsv_planes)
+        dst_h = cv2.cvtColor(dst_hsv, cv2.COLOR_HSV2BGR)
+        state, coordinate = get_data.state_update(dst_h)
+        action, highlight = motion_detect.motion_to_action(state, coordinate)
+        action_list.append(action)
+        highlight_list.append(highlight)
+
+        #Ycrcb
+        src_ycrcb = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+        ycrcb_planes = cv2.split(src_ycrcb)
+        ycrcb_planes[0] = cv2.equalizeHist(ycrcb_planes[0])
+        dst_ycrcb = cv2.merge(ycrcb_planes)
+        dst = cv2.cvtColor(dst_ycrcb, cv2.COLOR_YCrCb2BGR)
+        state, coordinate = get_data.state_update(dst)
+        action, highlight = motion_detect.motion_to_action(state, coordinate)
+        action_list.append(action)
+        highlight_list.append(highlight)
+
+        action = ensemble.get_ensemble_result(action_list)
+        highlight = ensemble.get_ensemble_result(highlight_list)
+        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",action)
+        if action =="finish":        
+            tts.Speak("감사합니다")
+            sys.exit()
+
+        #########################################################################################
+
         actionInstance.ReceiveFrame(frame)
         if highlight == False :            
             actionInstance.action(act='slideshow',direction=action)
