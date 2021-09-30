@@ -1,3 +1,4 @@
+from threading import Thread
 from utils import *
 import time
 import cv2
@@ -7,31 +8,39 @@ cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 get_data = GetData()
 motion_detect = Motion_Detect()
-tm = cv2.TickMeter()
-time_checker = list()
+actionInstance = Action()
+title1 = 'webcam'
+transaction=True
 while True:
-    # 시간 측정
-    tm.reset()
-    tm.start()
-    ret, frame = cap.read()
+    ret, frm = cap.read()
     if ret:
         # 이미지 분석해서 손동작과 손목 좌표를 받아온다
-        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        state, coordinate, frame = get_data.state_update(frame)
+        state, coordinate, frm = get_data.state_update(frm)
         # print(state, coordinate)
         # 손동작과 손목 좌표를 통해서 모션을 해석
-        action = motion_detect.motion_to_action(state, coordinate)
-        if action is not None:
-            print(action)
+        action, highlight = motion_detect.motion_to_action(state, coordinate, transaction=transaction)
+        if action in ['toDown',"toUp","toLeft","toRight"]:
+            print(action, highlight)
+        if highlight == False :
+            transaction = True
+            frame = actionInstance.action(act='slideshow',direction=action)
+        else:  
+            transaction = False
+            actionInstance.action(act='spotlight',direction=action)
+        
 
-        cv2.imshow('frame', frame)
-        key = cv2.waitKey(1)
-        if key ==27:
-            break        
-    else:
-        print(frame)
-    tm.stop()
-    ms = tm.getTimeMilli()
-    time_checker.append(ms)
-print("평균 처리 시간:",round(np.mean(np.array(time_checker)),2))
+        # print(f'action : {action}, highlight : {highlight}')
+        frm = cv2.putText(frm,str(action),(100,100),1,3,(255,100,0),2)
+        h, w, c = frm.shape
+        frame[0:h, 0:w,:] = frm
+        frm = frame
+            
+    cv2.namedWindow(title1, cv2.WINDOW_NORMAL)  
+    cv2.setWindowProperty(title1, cv2.WND_PROP_TOPMOST, 1)
+    cv2.imshow(title1, frm)
+    key = cv2.waitKey(50)
+    if key ==27:
+        break
+    # else:
+    #     print(frame)
 
